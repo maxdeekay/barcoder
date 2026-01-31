@@ -157,7 +157,7 @@ export function ListPage() {
               onClick={() => navigate(`/list/${list.id}/sync`)}
               style={{ fontSize: "0.875rem", padding: "8px 16px" }}
             >
-              Sync ({totalItems})
+              Show barcodes ({totalItems})
             </button>
           )}
         </div>

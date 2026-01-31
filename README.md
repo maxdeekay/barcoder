@@ -1,73 +1,29 @@
-# React + TypeScript + Vite
+# Barcoder
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A barcode scanner web app for collaborative grocery shopping.
 
-Currently, two official plugins are available:
+**Live:** [barcoder-one.vercel.app](https://barcoder-one.vercel.app/)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## What it does
 
-## React Compiler
+When two people shop together but only one has the store's handheld scanner, the other person collects items without scanning them. At checkout, every item needs to be individually lifted and scanned. Barcoder solves this by letting the second person scan barcodes with their phone camera during shopping. When they meet up, the app displays each barcode on screen one at a time for the store's handheld scanner to read — no need to dig through the basket.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Features
 
-## Expanding the ESLint configuration
+- Scan EAN-13/EAN-8/UPC-A barcodes via phone camera
+- Store scanned items in lists with quantity tracking
+- Sync mode: display barcodes one at a time for store scanner readback
+- Mark items as defect for manual scanning
+- Product name and image lookup via Open Food Facts API
+- Dark mode with system preference detection
+- Fully offline-capable data (localStorage)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Tech
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- React + TypeScript + Vite
+- [html5-qrcode](https://github.com/nicedoc/html5-qrcode) for camera scanning
+- [react-barcode](https://github.com/kciter/react-barcode) (JsBarcode) for rendering barcodes
+- [Open Food Facts API](https://world.openfoodfacts.org/data) for product lookup
+- All data stored in localStorage — no backend, no account required
+- Product lookup results cached in localStorage for offline access
+- Deployed on Vercel

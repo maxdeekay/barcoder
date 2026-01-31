@@ -1,9 +1,83 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Barcode from "react-barcode";
 import { useLists } from "../hooks/useLists";
 import { useWakeLock } from "../hooks/useWakeLock";
 import { lookupProduct, type ProductInfo } from "../utils/productLookup";
+
+type AnimState =
+  | { phase: "idle" }
+  | { phase: "sliding"; direction: "left" | "right"; nextIndex: number };
+
+function BarcodeCard({
+  barcode,
+  product,
+  isDefect,
+  defectLabel,
+  quantityLabel,
+}: {
+  barcode: string;
+  product?: ProductInfo;
+  isDefect: boolean;
+  defectLabel: boolean;
+  quantityLabel: string | null;
+}) {
+  return (
+    <div
+      style={{
+        minWidth: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px 16px",
+        flexShrink: 0,
+      }}
+    >
+      <div style={{ opacity: isDefect ? 0.3 : 1, transition: "opacity 0.2s" }}>
+        <Barcode
+          value={barcode}
+          format="EAN13"
+          width={3}
+          height={140}
+          fontSize={20}
+          margin={0}
+          background="transparent"
+          lineColor={isDefect ? "#dc2626" : "#000000"}
+        />
+      </div>
+      {product?.name && (
+        <div
+          style={{
+            fontSize: "1rem",
+            fontWeight: 600,
+            color: isDefect ? "#dc2626" : "#0f172a",
+            marginTop: 12,
+            textAlign: "center",
+          }}
+        >
+          {product.name}
+        </div>
+      )}
+      <div
+        style={{
+          fontSize: "0.85rem",
+          color: "#dc2626",
+          fontWeight: 600,
+          marginTop: 4,
+          visibility: defectLabel ? "visible" : "hidden",
+        }}
+      >
+        Marked as defect — scan manually
+      </div>
+      {quantityLabel && (
+        <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: 4 }}>
+          {quantityLabel}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SyncPage() {
   const { id } = useParams<{ id: string }>();
@@ -13,11 +87,11 @@ export function SyncPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [products, setProducts] = useState<Record<string, ProductInfo>>({});
   const [defects, setDefects] = useState<Set<string>>(new Set());
+  const [anim, setAnim] = useState<AnimState>({ phase: "idle" });
+  const animatingRef = useRef(false);
 
-  // Keep screen awake during sync
   useWakeLock();
 
-  // Initialize defects from list data
   useEffect(() => {
     if (!list) return;
     const initial = new Set<string>();
@@ -27,7 +101,6 @@ export function SyncPage() {
     setDefects(initial);
   }, [list]);
 
-  // Look up product info for all items
   useEffect(() => {
     if (!list) return;
     for (const item of list.items) {
@@ -43,15 +116,40 @@ export function SyncPage() {
     }
   }, [list, products]);
 
-  // Flatten items: quantity 3 = barcode appears 3 times, skip defects
   const flatBarcodes = useMemo(() => {
     if (!list) return [];
-    return list.items
-      .filter((item) => !defects.has(item.barcode))
-      .flatMap((item) =>
-        Array.from({ length: item.quantity }, () => item.barcode),
-      );
-  }, [list, defects]);
+    return list.items.flatMap((item) =>
+      Array.from({ length: item.quantity }, () => item.barcode),
+    );
+  }, [list]);
+
+  const goNext = () => {
+    if (animatingRef.current) return;
+    if (currentIndex >= flatBarcodes.length - 1) {
+      navigate(`/list/${list!.id}`);
+      return;
+    }
+    animatingRef.current = true;
+    const nextIdx = currentIndex + 1;
+    setAnim({ phase: "sliding", direction: "left", nextIndex: nextIdx });
+    setTimeout(() => {
+      setCurrentIndex(nextIdx);
+      setAnim({ phase: "idle" });
+      animatingRef.current = false;
+    }, 250);
+  };
+
+  const goPrev = () => {
+    if (animatingRef.current || currentIndex <= 0) return;
+    animatingRef.current = true;
+    const nextIdx = currentIndex - 1;
+    setAnim({ phase: "sliding", direction: "right", nextIndex: nextIdx });
+    setTimeout(() => {
+      setCurrentIndex(nextIdx);
+      setAnim({ phase: "idle" });
+      animatingRef.current = false;
+    }, 250);
+  };
 
   if (!list) {
     return (
@@ -66,9 +164,7 @@ export function SyncPage() {
           background: "#fff",
         }}
       >
-        <p style={{ color: "var(--color-text-secondary)", marginBottom: 16 }}>
-          List not found.
-        </p>
+        <p style={{ color: "#64748b", marginBottom: 16 }}>List not found.</p>
         <button className="btn-primary" onClick={() => navigate(-1)}>
           Go back
         </button>
@@ -76,15 +172,16 @@ export function SyncPage() {
     );
   }
 
-  const handleDefect = (barcode: string) => {
+  const toggleDefect = (barcode: string) => {
     const next = new Set(defects);
-    next.add(barcode);
-    setDefects(next);
-    markDefect(list.id, barcode, true);
-    // Adjust index if we removed a barcode before or at current position
-    if (currentIndex >= flatBarcodes.length - 1 && currentIndex > 0) {
-      setCurrentIndex((i) => i - 1);
+    if (next.has(barcode)) {
+      next.delete(barcode);
+      markDefect(list.id, barcode, false);
+    } else {
+      next.add(barcode);
+      markDefect(list.id, barcode, true);
     }
+    setDefects(next);
   };
 
   if (flatBarcodes.length === 0) {
@@ -100,11 +197,7 @@ export function SyncPage() {
           background: "#fff",
         }}
       >
-        <p style={{ color: "var(--color-text-secondary)", marginBottom: 16 }}>
-          {defects.size > 0
-            ? "All remaining items are marked as defect."
-            : "No items to sync."}
-        </p>
+        <p style={{ color: "#64748b", marginBottom: 16 }}>No items to sync.</p>
         <button
           className="btn-primary"
           onClick={() => navigate(`/list/${list.id}`)}
@@ -118,7 +211,29 @@ export function SyncPage() {
   const safeIndex = Math.min(currentIndex, flatBarcodes.length - 1);
   const barcode = flatBarcodes[safeIndex];
   const isFirst = safeIndex === 0;
-  const isLast = safeIndex === flatBarcodes.length - 1;
+  const isDefect = defects.has(barcode);
+
+  const getQuantityLabel = (bc: string, idx: number) => {
+    const item = list.items.find((i) => i.barcode === bc);
+    if (!item || item.quantity <= 1) return null;
+    let count = 0;
+    for (let i = 0; i <= idx; i++) {
+      if (flatBarcodes[i] === bc) count++;
+    }
+    return `(${count} of ${item.quantity})`;
+  };
+
+  // During animation, show two cards side by side; the strip shifts to reveal the next one
+  const isSliding = anim.phase === "sliding";
+  const slidingLeft = isSliding && anim.direction === "left";
+  const slidingRight = isSliding && anim.direction === "right";
+  const nextBarcode = isSliding ? flatBarcodes[anim.nextIndex] : null;
+
+  // Strip offset: idle = show first card (0%), sliding left = shift to second card (-50%), sliding right = starts at -50% and shifts to 0%
+  let stripOffset = "0%";
+  if (slidingLeft) stripOffset = "-50%";
+  if (slidingRight) stripOffset = "0%";
+  const stripInitial = slidingRight ? "-50%" : "0%";
 
   return (
     <div
@@ -167,7 +282,7 @@ export function SyncPage() {
         </span>
       </div>
 
-      {/* Brightness reminder */}
+      {/* Hints */}
       <div
         style={{
           textAlign: "center",
@@ -176,99 +291,115 @@ export function SyncPage() {
           color: "#92400e",
           background: "#fffbeb",
           borderBottom: "1px solid #fde68a",
+          lineHeight: 1.5,
         }}
       >
-        Turn screen brightness to max for best scanning results
+        Max brightness for best results. Tap barcode to advance.
       </div>
 
-      {/* Barcode display — always white bg, black bars */}
+      {/* Barcode carousel — tap to go next */}
       <div
+        onClick={goNext}
         style={{
           flex: 1,
+          overflow: "hidden",
+          cursor: "pointer",
+          background: isDefect ? "#fef2f2" : "#ffffff",
+          transition: "background 0.2s",
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
-          justifyContent: "center",
-          padding: "24px 16px",
-          gap: 8,
-          background: "#ffffff",
         }}
       >
-        <Barcode
-          value={barcode}
-          format="EAN13"
-          width={3}
-          height={140}
-          fontSize={20}
-          margin={0}
-          background="#ffffff"
-          lineColor="#000000"
-        />
-        {products[barcode]?.name && (
-          <div
-            style={{
-              fontSize: "1rem",
-              fontWeight: 600,
-              color: "#0f172a",
-              marginTop: 12,
-              textAlign: "center",
-            }}
-          >
-            {products[barcode].name}
-          </div>
-        )}
         <div
-          style={{
-            fontSize: "0.8rem",
-            color: "#64748b",
-            marginTop: 4,
-          }}
-        >
-          {(() => {
-            const item = list.items.find((i) => i.barcode === barcode);
-            if (!item || item.quantity <= 1) return null;
-            let count = 0;
-            for (let i = 0; i <= safeIndex; i++) {
-              if (flatBarcodes[i] === barcode) count++;
+          ref={(el) => {
+            // Set initial position instantly (no transition) for right-slide
+            if (el && slidingRight) {
+              el.style.transition = "none";
+              el.style.transform = `translateX(${stripInitial})`;
+              // Force reflow, then apply the animated position
+              el.getBoundingClientRect();
+              el.style.transition = "transform 0.25s ease-in-out";
+              el.style.transform = `translateX(${stripOffset})`;
             }
-            return `(${count} of ${item.quantity})`;
-          })()}
-        </div>
-
-        {/* Defect button */}
-        <button
-          onClick={() => handleDefect(barcode)}
+          }}
           style={{
-            marginTop: 16,
-            background: "transparent",
-            border: "1px solid #dc2626",
-            color: "#dc2626",
-            borderRadius: 8,
-            padding: "8px 16px",
-            fontSize: "0.85rem",
-            fontWeight: 500,
-            cursor: "pointer",
-            minHeight: 36,
+            display: "flex",
+            width: isSliding ? "200%" : "100%",
+            transform: slidingLeft
+              ? `translateX(${stripOffset})`
+              : slidingRight
+                ? undefined // handled by ref above
+                : "translateX(0%)",
+            transition: slidingLeft ? "transform 0.25s ease-in-out" : "none",
           }}
         >
-          Mark as defect
-        </button>
+          {slidingRight && nextBarcode !== null && (
+            <BarcodeCard
+              barcode={nextBarcode}
+              product={products[nextBarcode]}
+              isDefect={defects.has(nextBarcode)}
+              defectLabel={defects.has(nextBarcode)}
+              quantityLabel={getQuantityLabel(nextBarcode, anim.nextIndex)}
+            />
+          )}
+          <BarcodeCard
+            barcode={barcode}
+            product={products[barcode]}
+            isDefect={isDefect}
+            defectLabel={isDefect}
+            quantityLabel={getQuantityLabel(barcode, safeIndex)}
+          />
+          {slidingLeft && nextBarcode !== null && (
+            <BarcodeCard
+              barcode={nextBarcode}
+              product={products[nextBarcode]}
+              isDefect={defects.has(nextBarcode)}
+              defectLabel={defects.has(nextBarcode)}
+              quantityLabel={getQuantityLabel(nextBarcode, anim.nextIndex)}
+            />
+          )}
+        </div>
       </div>
 
-      {/* Navigation buttons */}
+      {/* Defect toggle + Previous */}
       <div
         style={{
-          display: "flex",
-          gap: 12,
-          padding: "16px 20px 32px",
+          padding: "12px 20px 32px",
           borderTop: "1px solid #e2e8f0",
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
         }}
       >
         <button
-          onClick={() => setCurrentIndex((i) => i - 1)}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleDefect(barcode);
+          }}
+          style={{
+            width: "100%",
+            background: isDefect ? "#dc2626" : "transparent",
+            border: "1px solid #dc2626",
+            color: isDefect ? "#ffffff" : "#dc2626",
+            borderRadius: 8,
+            padding: "10px 16px",
+            fontSize: "0.9rem",
+            fontWeight: 500,
+            cursor: "pointer",
+            minHeight: 44,
+            transition: "background 0.2s, color 0.2s",
+          }}
+        >
+          {isDefect ? "Unmark defect" : "Mark as defect"}
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            goPrev();
+          }}
           disabled={isFirst}
           style={{
-            flex: 1,
+            width: "100%",
             border: "2px solid #e2e8f0",
             background: "transparent",
             color: isFirst ? "#cbd5e1" : "#64748b",
@@ -282,23 +413,6 @@ export function SyncPage() {
           }}
         >
           ← Previous
-        </button>
-        <button
-          className="btn-primary"
-          onClick={() => {
-            if (isLast) {
-              navigate(`/list/${list.id}`);
-            } else {
-              setCurrentIndex((i) => i + 1);
-            }
-          }}
-          style={{
-            flex: 1,
-            fontSize: "1.1rem",
-            padding: "16px 12px",
-          }}
-        >
-          {isLast ? "Finish" : "Next →"}
         </button>
       </div>
     </div>

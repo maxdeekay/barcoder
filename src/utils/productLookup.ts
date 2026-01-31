@@ -3,12 +3,37 @@ export interface ProductInfo {
   imageUrl: string | null;
 }
 
-const cache = new Map<string, ProductInfo>();
+const STORAGE_KEY = "barcoder-products";
+
+// Load persisted cache from localStorage on startup
+const cache: Map<string, ProductInfo> = (() => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const entries: [string, ProductInfo][] = JSON.parse(stored);
+      return new Map(entries);
+    }
+  } catch {
+    // Corrupted data — start fresh
+  }
+  return new Map();
+})();
+
+function persistCache() {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(Array.from(cache.entries())),
+    );
+  } catch {
+    // Storage full — fail silently
+  }
+}
 
 /**
  * Looks up a product by barcode using the Open Food Facts API.
  * Returns name and image URL if found, null values otherwise.
- * Results are cached in memory for the session.
+ * Results are cached in localStorage for offline access.
  */
 export async function lookupProduct(barcode: string): Promise<ProductInfo> {
   const cached = cache.get(barcode);
@@ -23,10 +48,11 @@ export async function lookupProduct(barcode: string): Promise<ProductInfo> {
         headers: {
           "User-Agent": "Barcoder/1.0 (personal shopping helper)",
         },
-      }
+      },
     );
 
     if (!res.ok) {
+      // Don't persist network errors — retry next time
       cache.set(barcode, fallback);
       return fallback;
     }
@@ -35,6 +61,7 @@ export async function lookupProduct(barcode: string): Promise<ProductInfo> {
 
     if (data.status !== 1 || !data.product) {
       cache.set(barcode, fallback);
+      persistCache();
       return fallback;
     }
 
@@ -44,9 +71,10 @@ export async function lookupProduct(barcode: string): Promise<ProductInfo> {
     };
 
     cache.set(barcode, result);
+    persistCache();
     return result;
   } catch {
-    // Network error — likely offline in store, fail silently
+    // Network error — don't persist, so we retry when online
     cache.set(barcode, fallback);
     return fallback;
   }

@@ -18,7 +18,6 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     let cancelled = false;
 
     async function startScanner() {
-      // Wait a frame so the container div is rendered and has dimensions
       await new Promise((r) => requestAnimationFrame(r));
       if (cancelled) return;
 
@@ -38,7 +37,6 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             aspectRatio: 1,
           },
           (decodedText) => {
-            // Debounce: ignore same barcode within 1.5s
             const now = Date.now();
             if (
               decodedText === lastScanRef.current &&
@@ -49,20 +47,16 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
             lastScanRef.current = decodedText;
             lastScanTimeRef.current = now;
 
-            // Haptic feedback
             if (navigator.vibrate) {
               navigator.vibrate(100);
             }
 
             onScan(decodedText);
           },
-          () => {
-            // Ignore scan failures (no barcode in frame)
-          },
+          () => {},
         );
 
         if (cancelled) {
-          // StrictMode: started but cleanup already ran, stop immediately
           await scanner.stop();
           scanner.clear();
         } else {
@@ -108,28 +102,15 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
+          justifyContent: "center",
           alignItems: "center",
           padding: "12px 16px",
           color: "#fff",
         }}
       >
-        <span style={{ fontWeight: 600 }}>Scan barcode</span>
-        <button
-          onClick={onClose}
-          style={{
-            background: "rgba(255,255,255,0.2)",
-            color: "#fff",
-            borderRadius: 8,
-            padding: "8px 16px",
-            minHeight: 40,
-            border: "none",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          Close
-        </button>
+        <span style={{ fontWeight: 600, fontSize: "1.1rem" }}>
+          Scan barcode
+        </span>
       </div>
 
       {error ? (
@@ -154,6 +135,27 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
       ) : (
         <div id="barcode-scanner-viewport" style={{ flex: 1 }} />
       )}
+
+      {/* Close button at bottom */}
+      <div style={{ padding: "16px 20px 32px" }}>
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%",
+            padding: "16px 24px",
+            fontSize: "1.1rem",
+            fontWeight: 600,
+            background: "rgba(255,255,255,0.15)",
+            color: "#fff",
+            border: "2px solid rgba(255,255,255,0.3)",
+            borderRadius: 12,
+            cursor: "pointer",
+            minHeight: 44,
+          }}
+        >
+          Close scanner
+        </button>
+      </div>
     </div>
   );
 }

@@ -28,6 +28,18 @@ export function HomePage() {
 
   return (
     <Layout title="Barcoder">
+      <p
+        style={{
+          fontSize: "0.85rem",
+          color: "var(--color-text-secondary)",
+          marginBottom: 20,
+          lineHeight: 1.5,
+        }}
+      >
+        Scan barcodes with your phone, then display them one at a time for the
+        store scanner to read.
+      </p>
+
       <form
         onSubmit={handleCreate}
         style={{ display: "flex", gap: 8, marginBottom: 24 }}
@@ -81,7 +93,7 @@ export function HomePage() {
                 }}
               >
                 {itemCount(list)} items ·{" "}
-                {new Date(list.createdAt).toLocaleDateString()}
+                {new Date(list.createdAt).toISOString().slice(0, 10)}
               </div>
             </div>
             <button
