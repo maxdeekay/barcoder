@@ -9,6 +9,9 @@ type AnimState =
   | { phase: "idle" }
   | { phase: "sliding"; direction: "left" | "right"; nextIndex: number };
 
+const SLIDE_DURATION = 450;
+const SLIDE_EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
+
 function BarcodeCard({
   barcode,
   product,
@@ -136,7 +139,7 @@ export function SyncPage() {
       setCurrentIndex(nextIdx);
       setAnim({ phase: "idle" });
       animatingRef.current = false;
-    }, 250);
+    }, SLIDE_DURATION);
   };
 
   const goPrev = () => {
@@ -148,7 +151,7 @@ export function SyncPage() {
       setCurrentIndex(nextIdx);
       setAnim({ phase: "idle" });
       animatingRef.current = false;
-    }, 250);
+    }, SLIDE_DURATION);
   };
 
   if (!list) {
@@ -231,9 +234,9 @@ export function SyncPage() {
 
   // Strip offset: idle = show first card (0%), sliding left = shift to second card (-50%), sliding right = starts at -50% and shifts to 0%
   let stripOffset = "0%";
-  if (slidingLeft) stripOffset = "-50%";
+  if (slidingLeft) stripOffset = "-107.1%";
   if (slidingRight) stripOffset = "0%";
-  const stripInitial = slidingRight ? "-50%" : "0%";
+  const stripInitial = slidingRight ? "-107.1%" : "0%";
 
   return (
     <div
@@ -318,7 +321,7 @@ export function SyncPage() {
               el.style.transform = `translateX(${stripInitial})`;
               // Force reflow, then apply the animated position
               el.getBoundingClientRect();
-              el.style.transition = "transform 0.25s ease-in-out";
+              el.style.transition = `transform ${SLIDE_DURATION}ms ${SLIDE_EASING}`;
               el.style.transform = `translateX(${stripOffset})`;
             }
           }}
@@ -330,7 +333,9 @@ export function SyncPage() {
               : slidingRight
                 ? undefined // handled by ref above
                 : "translateX(0%)",
-            transition: slidingLeft ? "transform 0.25s ease-in-out" : "none",
+            transition: slidingLeft
+              ? `transform ${SLIDE_DURATION}ms ${SLIDE_EASING}`
+              : "none",
           }}
         >
           {slidingRight && nextBarcode !== null && (
