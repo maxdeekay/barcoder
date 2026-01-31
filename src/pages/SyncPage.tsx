@@ -5,83 +5,6 @@ import { useLists } from "../hooks/useLists";
 import { useWakeLock } from "../hooks/useWakeLock";
 import { lookupProduct, type ProductInfo } from "../utils/productLookup";
 
-type AnimState =
-  | { phase: "idle" }
-  | { phase: "sliding"; direction: "left" | "right"; nextIndex: number };
-
-const SLIDE_DURATION = 450;
-const SLIDE_EASING = "cubic-bezier(0.16, 1, 0.3, 1)";
-
-function BarcodeCard({
-  barcode,
-  product,
-  isDefect,
-  defectLabel,
-  quantityLabel,
-}: {
-  barcode: string;
-  product?: ProductInfo;
-  isDefect: boolean;
-  defectLabel: boolean;
-  quantityLabel: string | null;
-}) {
-  return (
-    <div
-      style={{
-        minWidth: "100%",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px 16px",
-        flexShrink: 0,
-      }}
-    >
-      <div style={{ opacity: isDefect ? 0.3 : 1, transition: "opacity 0.2s" }}>
-        <Barcode
-          value={barcode}
-          format="EAN13"
-          width={3}
-          height={140}
-          fontSize={20}
-          margin={0}
-          background="transparent"
-          lineColor={isDefect ? "#dc2626" : "#000000"}
-        />
-      </div>
-      {product?.name && (
-        <div
-          style={{
-            fontSize: "1rem",
-            fontWeight: 600,
-            color: isDefect ? "#dc2626" : "#0f172a",
-            marginTop: 12,
-            textAlign: "center",
-          }}
-        >
-          {product.name}
-        </div>
-      )}
-      <div
-        style={{
-          fontSize: "0.85rem",
-          color: "#dc2626",
-          fontWeight: 600,
-          marginTop: 4,
-          visibility: defectLabel ? "visible" : "hidden",
-        }}
-      >
-        Marked as defect — scan manually
-      </div>
-      {quantityLabel && (
-        <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: 4 }}>
-          {quantityLabel}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function SyncPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -90,7 +13,7 @@ export function SyncPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [products, setProducts] = useState<Record<string, ProductInfo>>({});
   const [defects, setDefects] = useState<Set<string>>(new Set());
-  const [anim, setAnim] = useState<AnimState>({ phase: "idle" });
+  const [flash, setFlash] = useState(false);
   const animatingRef = useRef(false);
 
   useWakeLock();
@@ -133,25 +56,23 @@ export function SyncPage() {
       return;
     }
     animatingRef.current = true;
-    const nextIdx = currentIndex + 1;
-    setAnim({ phase: "sliding", direction: "left", nextIndex: nextIdx });
+    setFlash(true);
     setTimeout(() => {
-      setCurrentIndex(nextIdx);
-      setAnim({ phase: "idle" });
+      setCurrentIndex((i) => i + 1);
+      setFlash(false);
       animatingRef.current = false;
-    }, SLIDE_DURATION);
+    }, 150);
   };
 
   const goPrev = () => {
     if (animatingRef.current || currentIndex <= 0) return;
     animatingRef.current = true;
-    const nextIdx = currentIndex - 1;
-    setAnim({ phase: "sliding", direction: "right", nextIndex: nextIdx });
+    setFlash(true);
     setTimeout(() => {
-      setCurrentIndex(nextIdx);
-      setAnim({ phase: "idle" });
+      setCurrentIndex((i) => i - 1);
+      setFlash(false);
       animatingRef.current = false;
-    }, SLIDE_DURATION);
+    }, 150);
   };
 
   if (!list) {
@@ -216,27 +137,13 @@ export function SyncPage() {
   const isFirst = safeIndex === 0;
   const isDefect = defects.has(barcode);
 
-  const getQuantityLabel = (bc: string, idx: number) => {
-    const item = list.items.find((i) => i.barcode === bc);
-    if (!item || item.quantity <= 1) return null;
-    let count = 0;
-    for (let i = 0; i <= idx; i++) {
-      if (flatBarcodes[i] === bc) count++;
-    }
-    return `(${count} of ${item.quantity})`;
-  };
-
-  // During animation, show two cards side by side; the strip shifts to reveal the next one
-  const isSliding = anim.phase === "sliding";
-  const slidingLeft = isSliding && anim.direction === "left";
-  const slidingRight = isSliding && anim.direction === "right";
-  const nextBarcode = isSliding ? flatBarcodes[anim.nextIndex] : null;
-
-  // Strip offset: idle = show first card (0%), sliding left = shift to second card (-50%), sliding right = starts at -50% and shifts to 0%
-  let stripOffset = "0%";
-  if (slidingLeft) stripOffset = "-107.1%";
-  if (slidingRight) stripOffset = "0%";
-  const stripInitial = slidingRight ? "-107.1%" : "0%";
+  const bgColor = flash
+    ? isDefect
+      ? "#fecaca"
+      : "#d1fae5"
+    : isDefect
+      ? "#fef2f2"
+      : "#ffffff";
 
   return (
     <div
@@ -300,69 +207,79 @@ export function SyncPage() {
         Max brightness for best results. Tap barcode to advance.
       </div>
 
-      {/* Barcode carousel — tap to go next */}
+      {/* Barcode display — tap to go next */}
       <div
         onClick={goNext}
         style={{
           flex: 1,
-          overflow: "hidden",
-          cursor: "pointer",
-          background: isDefect ? "#fef2f2" : "#ffffff",
-          transition: "background 0.2s",
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
+          justifyContent: "center",
+          padding: "24px 16px",
+          gap: 8,
+          background: bgColor,
+          transition: flash ? "none" : "background 0.3s ease-out",
+          cursor: "pointer",
         }}
       >
         <div
-          ref={(el) => {
-            // Set initial position instantly (no transition) for right-slide
-            if (el && slidingRight) {
-              el.style.transition = "none";
-              el.style.transform = `translateX(${stripInitial})`;
-              // Force reflow, then apply the animated position
-              el.getBoundingClientRect();
-              el.style.transition = `transform ${SLIDE_DURATION}ms ${SLIDE_EASING}`;
-              el.style.transform = `translateX(${stripOffset})`;
-            }
-          }}
           style={{
-            display: "flex",
-            width: isSliding ? "200%" : "100%",
-            transform: slidingLeft
-              ? `translateX(${stripOffset})`
-              : slidingRight
-                ? undefined // handled by ref above
-                : "translateX(0%)",
-            transition: slidingLeft
-              ? `transform ${SLIDE_DURATION}ms ${SLIDE_EASING}`
-              : "none",
+            opacity: isDefect ? 0.3 : 1,
+            transition: "opacity 0.2s",
           }}
         >
-          {slidingRight && nextBarcode !== null && (
-            <BarcodeCard
-              barcode={nextBarcode}
-              product={products[nextBarcode]}
-              isDefect={defects.has(nextBarcode)}
-              defectLabel={defects.has(nextBarcode)}
-              quantityLabel={getQuantityLabel(nextBarcode, anim.nextIndex)}
-            />
-          )}
-          <BarcodeCard
-            barcode={barcode}
-            product={products[barcode]}
-            isDefect={isDefect}
-            defectLabel={isDefect}
-            quantityLabel={getQuantityLabel(barcode, safeIndex)}
+          <Barcode
+            value={barcode}
+            format="EAN13"
+            width={3}
+            height={140}
+            fontSize={20}
+            margin={0}
+            background="transparent"
+            lineColor={isDefect ? "#dc2626" : "#000000"}
           />
-          {slidingLeft && nextBarcode !== null && (
-            <BarcodeCard
-              barcode={nextBarcode}
-              product={products[nextBarcode]}
-              isDefect={defects.has(nextBarcode)}
-              defectLabel={defects.has(nextBarcode)}
-              quantityLabel={getQuantityLabel(nextBarcode, anim.nextIndex)}
-            />
-          )}
+        </div>
+        {products[barcode]?.name && (
+          <div
+            style={{
+              fontSize: "1rem",
+              fontWeight: 600,
+              color: isDefect ? "#dc2626" : "#0f172a",
+              marginTop: 12,
+              textAlign: "center",
+            }}
+          >
+            {products[barcode].name}
+          </div>
+        )}
+        <div
+          style={{
+            fontSize: "0.85rem",
+            color: "#dc2626",
+            fontWeight: 600,
+            marginTop: 4,
+            visibility: isDefect ? "visible" : "hidden",
+          }}
+        >
+          Marked as defect — scan manually
+        </div>
+        <div
+          style={{
+            fontSize: "0.8rem",
+            color: "#64748b",
+            marginTop: 4,
+          }}
+        >
+          {(() => {
+            const item = list.items.find((i) => i.barcode === barcode);
+            if (!item || item.quantity <= 1) return null;
+            let count = 0;
+            for (let i = 0; i <= safeIndex; i++) {
+              if (flatBarcodes[i] === barcode) count++;
+            }
+            return `(${count} of ${item.quantity})`;
+          })()}
         </div>
       </div>
 
