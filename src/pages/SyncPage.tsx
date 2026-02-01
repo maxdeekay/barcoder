@@ -12,33 +12,28 @@ export function SyncPage() {
   const list = getList(id!);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [products, setProducts] = useState<Record<string, ProductInfo>>({});
-  const [defects, setDefects] = useState<Set<string>>(new Set());
-  const [flash, setFlash] = useState(false);
+  const [defects, setDefects] = useState<Set<string>>(() => {
+    if (!list) return new Set();
+    return new Set(list.items.filter((i) => i.defect).map((i) => i.barcode));
+  });
+  const [flash, setFlash] = useState<"forward" | "backward" | null>(null);
   const animatingRef = useRef(false);
 
   useWakeLock();
 
   useEffect(() => {
     if (!list) return;
-    const initial = new Set<string>();
-    for (const item of list.items) {
-      if (item.defect) initial.add(item.barcode);
+    const missing = list.items.filter((item) => !(item.barcode in products));
+    if (missing.length === 0) return;
+    const placeholders: Record<string, ProductInfo> = {};
+    for (const item of missing) {
+      placeholders[item.barcode] = { name: null, imageUrl: null };
     }
-    setDefects(initial);
-  }, [list]);
-
-  useEffect(() => {
-    if (!list) return;
-    for (const item of list.items) {
-      if (!(item.barcode in products)) {
-        setProducts((prev) => ({
-          ...prev,
-          [item.barcode]: { name: null, imageUrl: null },
-        }));
-        lookupProduct(item.barcode).then((info) => {
-          setProducts((prev) => ({ ...prev, [item.barcode]: info }));
-        });
-      }
+    setProducts((prev) => ({ ...prev, ...placeholders }));
+    for (const item of missing) {
+      lookupProduct(item.barcode).then((info) => {
+        setProducts((prev) => ({ ...prev, [item.barcode]: info }));
+      });
     }
   }, [list, products]);
 
@@ -56,10 +51,10 @@ export function SyncPage() {
       return;
     }
     animatingRef.current = true;
-    setFlash(true);
+    setFlash("forward");
     setTimeout(() => {
       setCurrentIndex((i) => i + 1);
-      setFlash(false);
+      setFlash(null);
       animatingRef.current = false;
     }, 150);
   };
@@ -67,10 +62,10 @@ export function SyncPage() {
   const goPrev = () => {
     if (animatingRef.current || currentIndex <= 0) return;
     animatingRef.current = true;
-    setFlash(true);
+    setFlash("backward");
     setTimeout(() => {
       setCurrentIndex((i) => i - 1);
-      setFlash(false);
+      setFlash(null);
       animatingRef.current = false;
     }, 150);
   };
@@ -138,9 +133,11 @@ export function SyncPage() {
   const isDefect = defects.has(barcode);
 
   const bgColor = flash
-    ? isDefect
-      ? "#fecaca"
-      : "#d1fae5"
+    ? flash === "backward"
+      ? "#e2e8f0"
+      : isDefect
+        ? "#fecaca"
+        : "#d1fae5"
     : isDefect
       ? "#fef2f2"
       : "#ffffff";

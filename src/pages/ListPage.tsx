@@ -23,16 +23,17 @@ export function ListPage() {
   // Look up product info for any items we haven't resolved yet
   useEffect(() => {
     if (!list) return;
-    for (const item of list.items) {
-      if (!(item.barcode in products)) {
-        setProducts((prev) => ({
-          ...prev,
-          [item.barcode]: { name: null, imageUrl: null },
-        }));
-        lookupProduct(item.barcode).then((info) => {
-          setProducts((prev) => ({ ...prev, [item.barcode]: info }));
-        });
-      }
+    const missing = list.items.filter((item) => !(item.barcode in products));
+    if (missing.length === 0) return;
+    const placeholders: Record<string, ProductInfo> = {};
+    for (const item of missing) {
+      placeholders[item.barcode] = { name: null, imageUrl: null };
+    }
+    setProducts((prev) => ({ ...prev, ...placeholders }));
+    for (const item of missing) {
+      lookupProduct(item.barcode).then((info) => {
+        setProducts((prev) => ({ ...prev, [item.barcode]: info }));
+      });
     }
   }, [list, products]);
 

@@ -1,3 +1,9 @@
+export interface SavedCard {
+  id: string;
+  name: string;
+  barcode: string;
+}
+
 export interface ScannedItem {
   barcode: string;
   quantity: number;
